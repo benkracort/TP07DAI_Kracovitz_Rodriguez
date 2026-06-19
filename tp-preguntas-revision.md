@@ -8,11 +8,29 @@ Las siguientes preguntas evalúan la comprensión del recorrido completo del pro
 
 **1.** En `server-noob.js`, cada endpoint crea un `new Client(config)`, hace `await client.connect()`, ejecuta la query, y en el `finally` hace `await client.end()`. Explicá con tus palabras qué problema de performance tiene este enfoque cuando la API recibe muchos requests simultáneos.
 
+Cada vez que llega un request, el servidor crea una conexión nueva con PostgreSQL, la usa para hacer una consulta y luego la cierra. Abrir una conexión es una operación costosa porque implica crear un socket, autenticarse y negociar parámetros con la base de datos. Si llegan muchos requests al mismo tiempo, el servidor tendrá que crear y destruir muchas conexiones simultáneamente, lo que agrega demora a cada petición y puede agotar el límite de conexiones permitidas por PostgreSQL. Por eso este enfoque no escala bien cuando la API recibe mucho tráfico.
+
 **2.** ¿Qué pasa si PostgreSQL está apagado y un request llega a `server-noob.js`? El `client.connect()` falla, y después se ejecuta el `finally` con `await client.end()`. ¿Qué error puede ocurrir y por qué?
+
+Si PostgreSQL está apagado, la instrucción await client.connect() lanza una excepción porque no puede establecer la conexión. Luego se ejecuta el bloque finally, que intenta hacer: await client.end(); Pero como el cliente nunca llegó a conectarse correctamente, llamar a end() sobre ese cliente puede producir un error adicional: Error: Called end on a client that was never connected. Esto ocurre porque se está intentando cerrar una conexión que en realidad nunca se abrió.
 
 **3.** En `server-noob.js`, si un compañero te dice "el endpoint de crear alumno tiene un bug", tenés que buscarlo en un archivo de ~215 líneas. ¿Por qué esto se vuelve un problema más grave a medida que la aplicación crece? Mencioná también qué pasa con Git cuando dos personas trabajan en el mismo archivo.
 
+Con un archivo de unas 215 líneas todavía es posible encontrar un endpoint específico, pero a medida que la aplicación crece y se agregan más entidades y funcionalidades, el archivo puede terminar teniendo cientos o miles de líneas.
+
+En ese caso:
+
+-Encontrar un endpoint con un bug lleva más tiempo.
+-Es más difícil entender qué hace cada parte del sistema.
+-Mantener el código se vuelve complicado.
+
+Además, cuando dos desarrolladores trabajan sobre el mismo archivo, Git detecta cambios en las mismas líneas o zonas cercanas y aparecen conflictos de merge, que deben resolverse manualmente. Si cada recurso estuviera en un archivo distinto, esos conflictos serían mucho menos frecuentes
+
 **4.** Las queries en `server-noob.js` usan parámetros posicionales (`$1`, `$2`, etc.) en vez de concatenar strings. ¿Qué vulnerabilidad se previene con esto y por qué es importante?
+
+Usar parámetros posicionales ($1, $2, etc.) evita la vulnerabilidad de inyección SQL. Si se concatenaran strings para construir la consulta, un atacante podría enviar texto malicioso para modificar la query, por ejemplo: '; DROP TABLE alumnos; --
+
+Al usar parámetros, la librería pg envía esos valores por separado y los trata únicamente como datos, no como parte del código SQL. De esta manera, el contenido ingresado por el usuario no puede alterar la estructura de la consulta ni ejecutar instrucciones no deseadas.
 
 ---
 
